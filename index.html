@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f7fa; color: #111; min-height: 100vh; }
@@ -26,52 +27,61 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
+const SUPABASE_URL = "https://ntvkvhjjlndvxcppylqa.supabase.co";
+const SUPABASE_KEY = "sb_publishable_u_HABir8HeojzUJKM6yY9A_TfcYzcGa";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const ROW1 = ["roster","selection","scores","leaderboard"];
 const ROW2 = ["history","import","backup","settings"];
 const TAB_LABELS = { roster:"Roster", selection:"Player Selection", scores:"Score Entry", leaderboard:"Leaderboard", history:"Score History", import:"Import Excel", backup:"Backup / Restore", settings:"Settings" };
 
 function calcHandicap(avg, base, factor) { return Math.max(0, Math.round((base - avg) * factor)); }
-function ls(key, fb) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fb; } catch { return fb; } }
-function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
 
 const C = {
-  bg: "#f5f7fa", card: "#ffffff", border: "#e5e7eb", borderLight: "#f0f2f5",
-  text: "#111827", textSub: "#6b7280", textMuted: "#9ca3af",
-  blue: "#3b82f6", blueBg: "#eff6ff", blueBorder: "#bfdbfe", blueText: "#1d4ed8",
-  green: "#16a34a", greenBg: "#f0fdf4", greenBorder: "#bbf7d0", greenText: "#15803d",
-  red: "#dc2626", redBg: "#fef2f2", redBorder: "#fecaca", redText: "#b91c1c",
-  gray: "#6b7280", grayBg: "#f9fafb", grayBorder: "#e5e7eb",
+  bg:"#f5f7fa", card:"#ffffff", border:"#e5e7eb", borderLight:"#f0f2f5",
+  text:"#111827", textSub:"#6b7280", textMuted:"#9ca3af",
+  blue:"#3b82f6", blueBg:"#eff6ff", blueBorder:"#bfdbfe", blueText:"#1d4ed8",
+  green:"#16a34a", greenBg:"#f0fdf4", greenBorder:"#bbf7d0", greenText:"#15803d",
+  red:"#dc2626", redBg:"#fef2f2", redBorder:"#fecaca", redText:"#b91c1c",
+  gray:"#6b7280", grayBg:"#f9fafb", grayBorder:"#e5e7eb",
+  orange:"#ea580c", orangeBg:"#fff7ed", orangeBorder:"#fed7aa", orangeText:"#c2410c",
 };
 
 function PwGate({ title, subtitle, onUnlock }) {
   const [pw, setPw] = useState(""), [err, setErr] = useState(false);
   function attempt() { if (pw === "12345") { onUnlock(); setPw(""); setErr(false); } else setErr(true); }
   return (
-    <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12, maxWidth: 340 }}>
-      <p style={{ fontWeight: 500, marginBottom: 4 }}>{title}</p>
-      <p style={{ color: C.textSub, fontSize: 13, marginBottom: 12 }}>{subtitle}</p>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input type="password" placeholder="Password" value={pw}
-          onChange={e => { setPw(e.target.value); setErr(false); }}
-          onKeyDown={e => e.key === "Enter" && attempt()}
-          style={{ flex: 1, width: "auto", borderColor: err ? C.red : undefined }} />
-        <button onClick={attempt} style={{ background: C.blueBg, color: C.blueText, border: `0.5px solid ${C.blueBorder}` }}>Unlock</button>
+    <div style={{ background:C.card, border:`0.5px solid ${C.border}`, borderRadius:12, padding:"1rem 1.25rem", marginBottom:12, maxWidth:340 }}>
+      <p style={{ fontWeight:500, marginBottom:4 }}>{title}</p>
+      <p style={{ color:C.textSub, fontSize:13, marginBottom:12 }}>{subtitle}</p>
+      <div style={{ display:"flex", gap:8 }}>
+        <input type="password" placeholder="Password" value={pw} onChange={e=>{ setPw(e.target.value); setErr(false); }} onKeyDown={e=>e.key==="Enter"&&attempt()} style={{ flex:1, width:"auto", borderColor:err?C.red:undefined }} />
+        <button onClick={attempt} style={{ background:C.blueBg, color:C.blueText, border:`0.5px solid ${C.blueBorder}` }}>Unlock</button>
       </div>
-      {err && <p style={{ color: C.red, fontSize: 13, marginTop: 6 }}>Incorrect password.</p>}
+      {err && <p style={{ color:C.red, fontSize:13, marginTop:6 }}>Incorrect password.</p>}
     </div>
   );
 }
 
+function Spinner() {
+  return <div style={{ display:"flex", justifyContent:"center", padding:"2rem" }}>
+    <div style={{ width:28, height:28, border:`3px solid ${C.blueBorder}`, borderTopColor:C.blue, borderRadius:"50%", animation:"spin 0.7s linear infinite" }}/>
+    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  </div>;
+}
+
 function App() {
   const [tab, setTab] = useState("roster");
-  const [bowlers, setBowlers] = useState(() => ls("bwl2_bowlers", []));
-  const [sessions, setSessions] = useState(() => ls("bwl2_sessions", []));
-  const [settings, setSettings] = useState(() => ls("bwl2_settings", { base: 220, factor: 80, teamName: "My Team" }));
+  const [bowlers, setBowlers] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [settings, setSettings] = useState({ base:220, factor:80, teamName:"My Team" });
+  const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState(null);
   const [newName, setNewName] = useState("");
   const [dupError, setDupError] = useState(false);
   const [sessionScores, setSessionScores] = useState({});
   const [activeBowlers, setActiveBowlers] = useState([]);
-  const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0,10));
   const [saved, setSaved] = useState(false);
   const [historyUnlocked, setHistoryUnlocked] = useState(false);
   const [importUnlocked, setImportUnlocked] = useState(false);
@@ -82,184 +92,255 @@ function App() {
   const [restoreMode, setRestoreMode] = useState("merge");
   const fileInputRef = useRef(null);
 
-  useEffect(() => { lsSet("bwl2_bowlers", bowlers); }, [bowlers]);
-  useEffect(() => { lsSet("bwl2_sessions", sessions); }, [sessions]);
-  useEffect(() => { lsSet("bwl2_settings", settings); }, [settings]);
-  useEffect(() => { const init = {}; bowlers.forEach(b => { init[b.id] = ["", "", ""]; }); setSessionScores(init); }, [bowlers]);
+  // ── Load all data from Supabase on mount ──
+  useEffect(() => {
+    async function loadAll() {
+      setLoading(true);
+      try {
+        const [{ data: bData }, { data: sData }, { data: stData }] = await Promise.all([
+          sb.from("bowlers").select("*"),
+          sb.from("sessions").select("*").order("date", { ascending:false }),
+          sb.from("settings").select("*").eq("id","config").single(),
+        ]);
+        if (bData) setBowlers(bData);
+        if (sData) setSessions(sData);
+        if (stData?.data) setSettings(stData.data);
+      } catch(e) { showSync("error", "Could not load data from cloud."); }
+      setLoading(false);
+    }
+    loadAll();
+  }, []);
 
-  const factor = settings.factor / 100, base = Number(settings.base);
+  useEffect(() => { const init={}; bowlers.forEach(b=>{ init[b.id]=["","",""]; }); setSessionScores(init); }, [bowlers]);
+
+  function showSync(type, msg) { setSyncStatus({ type, msg }); setTimeout(()=>setSyncStatus(null), 3000); }
+
+  const factor = settings.factor/100, base = Number(settings.base);
 
   function getBowlerAvg(b) {
-    const bs = sessions.filter(s => (s.scores[b.id] || []).some(x => x !== "" && x !== null)).slice(0, 7);
-    const past = bs.flatMap(s => (s.scores[b.id] || []).filter(x => x !== "" && x !== null));
-    return past.length ? past.reduce((a, x) => a + Number(x), 0) / past.length : 0;
+    const bs = sessions.filter(s=>(s.scores[b.id]||[]).some(x=>x!==""&&x!==null)).slice(0,7);
+    const past = bs.flatMap(s=>(s.scores[b.id]||[]).filter(x=>x!==""&&x!==null));
+    return past.length ? past.reduce((a,x)=>a+Number(x),0)/past.length : 0;
   }
   function getBowlerHighGame(b) {
-    const all = sessions.flatMap(s => (s.scores[b.id] || []).filter(x => x !== "" && x !== null).map(Number));
+    const all = sessions.flatMap(s=>(s.scores[b.id]||[]).filter(x=>x!==""&&x!==null).map(Number));
     return all.length ? Math.max(...all) : 0;
   }
   function getBowlerHighSeries(b) {
-    let high = 0;
-    sessions.forEach(s => { const gs = (s.scores[b.id] || []).filter(x => x !== "" && x !== null).map(Number); if (gs.length === 3) high = Math.max(high, gs.reduce((a, x) => a + x, 0)); });
+    let high=0;
+    sessions.forEach(s=>{ const gs=(s.scores[b.id]||[]).filter(x=>x!==""&&x!==null).map(Number); if(gs.length===3) high=Math.max(high,gs.reduce((a,x)=>a+x,0)); });
     return high;
   }
 
-  function addBowler() {
-    const name = newName.trim(); if (!name) return;
-    if (bowlers.some(b => b.name.toLowerCase() === name.toLowerCase())) { setDupError(true); setTimeout(() => setDupError(false), 2500); return; }
-    setBowlers(prev => [...prev, { id: Date.now().toString(), name }]);
-    setNewName(""); setDupError(false);
+  async function addBowler() {
+    const name=newName.trim(); if(!name) return;
+    if(bowlers.some(b=>b.name.toLowerCase()===name.toLowerCase())) { setDupError(true); setTimeout(()=>setDupError(false),2500); return; }
+    const newB={ id:Date.now().toString(), name };
+    setBowlers(prev=>[...prev,newB]); setNewName(""); setDupError(false);
+    const { error } = await sb.from("bowlers").insert(newB);
+    if(error) showSync("error","Failed to save bowler to cloud.");
+    else showSync("success","Bowler saved.");
   }
-  function removeBowler(id) { setBowlers(prev => prev.filter(b => b.id !== id)); }
-  function toggleBowler(id) { setActiveBowlers(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }
+
+  async function removeBowler(id) {
+    setBowlers(prev=>prev.filter(b=>b.id!==id));
+    const { error } = await sb.from("bowlers").delete().eq("id",id);
+    if(error) showSync("error","Failed to delete bowler from cloud.");
+  }
+
+  function toggleBowler(id) { setActiveBowlers(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
+
   function updateScore(bid, gi, val) {
-    setSessionScores(prev => { const arr = [...(prev[bid] || ["", "", ""])]; arr[gi] = val === "" ? "" : Math.min(300, Math.max(0, Number(val))); return { ...prev, [bid]: arr }; });
+    setSessionScores(prev=>{ const arr=[...(prev[bid]||["","",""])]; arr[gi]=val===""?"":Math.min(300,Math.max(0,Number(val))); return {...prev,[bid]:arr}; });
   }
-  function saveSession() {
-    const fs = {}; activeBowlers.forEach(id => { fs[id] = sessionScores[id] || ["", "", ""]; });
-    setSessions(prev => [{ id: Date.now().toString(), date: sessionDate, scores: fs }, ...prev]);
-    const reset = {}; bowlers.forEach(b => { reset[b.id] = ["", "", ""]; }); setSessionScores(reset); setActiveBowlers([]);
-    setSaved(true); setTimeout(() => setSaved(false), 2000);
+
+  async function saveSession() {
+    const fs={}; activeBowlers.forEach(id=>{ fs[id]=sessionScores[id]||["","",""]; });
+    const newS={ id:Date.now().toString(), date:sessionDate, scores:fs };
+    setSessions(prev=>[newS,...prev].sort((a,b)=>b.date.localeCompare(a.date)));
+    const reset={}; bowlers.forEach(b=>{ reset[b.id]=["","",""]; }); setSessionScores(reset); setActiveBowlers([]);
+    setSaved(true); setTimeout(()=>setSaved(false),2000);
+    const { error } = await sb.from("sessions").insert(newS);
+    if(error) showSync("error","Failed to save session to cloud.");
+    else showSync("success","Session saved to cloud.");
   }
-  function deleteSession(sid) { setSessions(prev => prev.filter(s => s.id !== sid)); }
+
+  async function deleteSession(sid) {
+    setSessions(prev=>prev.filter(s=>s.id!==sid));
+    const { error } = await sb.from("sessions").delete().eq("id",sid);
+    if(error) showSync("error","Failed to delete session from cloud.");
+  }
+
+  async function saveSettings(newSettings) {
+    setSettings(newSettings);
+    const { error } = await sb.from("settings").upsert({ id:"config", data:newSettings });
+    if(error) showSync("error","Failed to save settings to cloud.");
+  }
 
   function normalizeDate(raw) {
-    if (typeof raw === "number") { const d = new Date(Math.round((raw - 25569) * 86400 * 1000)); return d.toISOString().slice(0, 10); }
-    const s = String(raw).trim();
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) { const [dd, mm, yyyy] = s.split("/"); return `${yyyy}-${mm}-${dd}`; }
+    if(typeof raw==="number") { const d=new Date(Math.round((raw-25569)*86400*1000)); return d.toISOString().slice(0,10); }
+    const s=String(raw).trim();
+    if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)) { const [dd,mm,yyyy]=s.split("/"); return `${yyyy}-${mm}-${dd}`; }
     return s;
   }
 
   function handleFileImport(e) {
-    const file = e.target.files[0]; if (!file) return; setImportStatus(null);
-    const reader = new FileReader();
-    reader.onload = evt => {
+    const file=e.target.files[0]; if(!file) return; setImportStatus(null);
+    const reader=new FileReader();
+    reader.onload=async evt=>{
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-        if (!rawRows.length) throw new Error("No data found.");
-        let headerRowIdx = -1, headerMap = {};
-        for (let i = 0; i < Math.min(5, rawRows.length); i++) {
-          const row = rawRows[i].map(c => String(c).toLowerCase().trim());
-          const ni = row.indexOf("name"), di = row.indexOf("date"), g1 = row.indexOf("game1"), g2 = row.indexOf("game2"), g3 = row.indexOf("game3");
-          if (ni !== -1 && di !== -1 && g1 !== -1 && g2 !== -1 && g3 !== -1) { headerRowIdx = i; headerMap = { name: ni, date: di, game1: g1, game2: g2, game3: g3 }; break; }
+        const wb=XLSX.read(new Uint8Array(evt.target.result),{type:"array"});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+        if(!rawRows.length) throw new Error("No data found.");
+        let headerRowIdx=-1,headerMap={};
+        for(let i=0;i<Math.min(5,rawRows.length);i++) {
+          const row=rawRows[i].map(c=>String(c).toLowerCase().trim());
+          const ni=row.indexOf("name"),di=row.indexOf("date"),g1=row.indexOf("game1"),g2=row.indexOf("game2"),g3=row.indexOf("game3");
+          if(ni!==-1&&di!==-1&&g1!==-1&&g2!==-1&&g3!==-1) { headerRowIdx=i; headerMap={name:ni,date:di,game1:g1,game2:g2,game3:g3}; break; }
         }
-        if (headerRowIdx === -1) throw new Error("Headers not found. Need: name, date, game1, game2, game3");
-        const dataRows = rawRows.slice(headerRowIdx + 1).filter(r => r.some(c => c !== ""));
-        if (!dataRows.length) throw new Error("No data rows found.");
-        const bMap = {}, sMap = {};
-        dataRows.forEach(row => {
-          const name = String(row[headerMap.name] || "").trim(), date = normalizeDate(row[headerMap.date]);
-          if (!name || !date) return;
-          if (!bMap[name]) { const ex = bowlers.find(b => b.name.toLowerCase() === name.toLowerCase()); bMap[name] = ex ? ex.id : (Date.now().toString() + Math.random().toString(36).slice(2)); }
-          if (!sMap[date]) sMap[date] = { id: date + "_imp", date, scores: {} };
-          sMap[date].scores[bMap[name]] = [Number(row[headerMap.game1]), Number(row[headerMap.game2]), Number(row[headerMap.game3])];
+        if(headerRowIdx===-1) throw new Error("Headers not found. Need: name, date, game1, game2, game3");
+        const dataRows=rawRows.slice(headerRowIdx+1).filter(r=>r.some(c=>c!==""));
+        const bMap={},sMap={};
+        dataRows.forEach(row=>{
+          const name=String(row[headerMap.name]||"").trim(),date=normalizeDate(row[headerMap.date]);
+          if(!name||!date) return;
+          if(!bMap[name]) { const ex=bowlers.find(b=>b.name.toLowerCase()===name.toLowerCase()); bMap[name]=ex?ex.id:(Date.now().toString()+Math.random().toString(36).slice(2)); }
+          if(!sMap[date]) sMap[date]={ id:date+"_imp",date,scores:{} };
+          sMap[date].scores[bMap[name]]=[Number(row[headerMap.game1]),Number(row[headerMap.game2]),Number(row[headerMap.game3])];
         });
-        const ib = Object.entries(bMap).map(([name, id]) => ({ id, name }));
-        const is2 = Object.values(sMap).sort((a, b) => b.date.localeCompare(a.date));
-        setBowlers(prev => { const ex = prev.map(b => b.name.toLowerCase()); const m = [...prev]; ib.forEach(b => { if (!ex.includes(b.name.toLowerCase())) m.push(b); }); return m; });
-        setSessions(prev => { const ed = prev.map(s => s.date); const ns = is2.filter(s => !ed.includes(s.date)); return [...ns, ...prev].sort((a, b) => b.date.localeCompare(a.date)); });
-        setImportStatus({ type: "success", msg: `Imported ${ib.length} bowler(s) and ${is2.length} session(s).` });
-      } catch (err) { setImportStatus({ type: "error", msg: err.message }); }
-      if (fileInputRef.current) fileInputRef.current.value = "";
+        const ib=Object.entries(bMap).map(([name,id])=>({id,name}));
+        const is2=Object.values(sMap).sort((a,b)=>b.date.localeCompare(a.date));
+        const newBowlers=ib.filter(b=>!bowlers.some(ex=>ex.name.toLowerCase()===b.name.toLowerCase()));
+        const existDates=new Set(sessions.map(s=>s.date));
+        const newSessions=is2.filter(s=>!existDates.has(s.date));
+        if(newBowlers.length) { await sb.from("bowlers").insert(newBowlers); setBowlers(prev=>[...prev,...newBowlers]); }
+        if(newSessions.length) { await sb.from("sessions").insert(newSessions); setSessions(prev=>[...prev,...newSessions].sort((a,b)=>b.date.localeCompare(a.date))); }
+        setImportStatus({ type:"success", msg:`Imported ${newBowlers.length} bowler(s) and ${newSessions.length} session(s).` });
+      } catch(err) { setImportStatus({ type:"error", msg:err.message }); }
+      if(fileInputRef.current) fileInputRef.current.value="";
     };
-    reader.onerror = () => setImportStatus({ type: "error", msg: "Failed to read file." });
+    reader.onerror=()=>setImportStatus({ type:"error", msg:"Failed to read file." });
     reader.readAsArrayBuffer(file);
   }
 
   function exportExcel() {
-    const rows = leaderboard.map((b, i) => ({ Rank: i + 1, Name: b.name, Average: b.avg ? b.avg.toFixed(1) : "—", Handicap: b.avg ? Math.round(b.handicap) : "—", "High Game": b.highGame || "—", "High Series": b.highSeries || "—" }));
-    const ws = XLSX.utils.json_to_sheet(rows), wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Leaderboard");
-    XLSX.writeFile(wb, `${settings.teamName}_Leaderboard_${sessionDate}.xlsx`);
+    const rows=leaderboard.map((b,i)=>({ Rank:i+1, Name:b.name, Average:b.avg?Math.round(b.avg):"—", Handicap:b.avg?Math.round(b.handicap):"—", "High Game":b.highGame||"—", "High Series":b.highSeries||"—" }));
+    const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"Leaderboard");
+    XLSX.writeFile(wb,`${settings.teamName}_Leaderboard_${sessionDate}.xlsx`);
   }
 
   function exportPDF() {
-    const rows = leaderboard.map((b, i) => `<tr><td>${i+1}</td><td>${b.name}</td><td>${b.avg ? b.avg.toFixed(1) : "—"}</td><td>${b.avg ? Math.round(b.handicap) : "—"}</td><td>${b.highGame || "—"}</td><td>${b.highSeries || "—"}</td></tr>`).join("");
-    const html = `<!DOCTYPE html><html><head><meta charset='utf-8'><title>${settings.teamName} Leaderboard</title><style>body{font-family:Arial,sans-serif;padding:24px}h2{margin:0 0 4px}p{margin:0 0 16px;font-size:12px;color:#555}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#185fa5;color:#fff;padding:8px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #e0e0e0}tr:nth-child(even) td{background:#f5f8fc}</style></head><body><h2>${settings.teamName} Leaderboard</h2><p>Date: ${sessionDate} | Base: ${settings.base} | Factor: ${settings.factor}%</p><table><thead><tr><th>Rank</th><th>Name</th><th>Average</th><th>Handicap</th><th>Hi Game</th><th>Hi Series</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
-    const blob = new Blob([html], { type: "text/html" }), url = URL.createObjectURL(blob), a = document.createElement("a");
-    a.href = url; a.download = `${settings.teamName}_Leaderboard_${sessionDate}.html`;
+    const rows=leaderboard.map((b,i)=>`<tr><td>${i+1}</td><td>${b.name}</td><td>${b.avg?Math.round(b.avg):"—"}</td><td>${b.avg?Math.round(b.handicap):"—"}</td><td>${b.highGame||"—"}</td><td>${b.highSeries||"—"}</td></tr>`).join("");
+    const html=`<!DOCTYPE html><html><head><meta charset='utf-8'><title>${settings.teamName} Leaderboard</title><style>body{font-family:Arial,sans-serif;padding:24px}h2{margin:0 0 4px}p{margin:0 0 16px;font-size:12px;color:#555}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#185fa5;color:#fff;padding:8px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #e0e0e0}tr:nth-child(even) td{background:#f5f8fc}</style></head><body><h2>${settings.teamName} Leaderboard</h2><p>Date: ${sessionDate} | Base: ${settings.base} | Factor: ${settings.factor}%</p><table><thead><tr><th>Rank</th><th>Name</th><th>Average</th><th>Handicap</th><th>Hi Game</th><th>Hi Series</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    const blob=new Blob([html],{type:"text/html"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url; a.download=`${settings.teamName}_Leaderboard_${sessionDate}.html`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
-  function exportBackup() {
-    const payload = { version: 1, exportedAt: new Date().toISOString(), settings, bowlers, sessions };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob), a = document.createElement("a");
-    a.href = url; a.download = `${settings.teamName}_backup_${new Date().toISOString().slice(0, 10)}.json`;
+  async function exportBackup() {
+    const payload={ version:1, exportedAt:new Date().toISOString(), settings, bowlers, sessions };
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url; a.download=`${settings.teamName}_backup_${new Date().toISOString().slice(0,10)}.json`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    setBackupStatus({ type: "success", msg: "Backup downloaded successfully." });
+    setBackupStatus({ type:"success", msg:"Backup downloaded successfully." });
   }
 
-  function handleRestoreFile(e) {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = evt => {
+  async function handleRestoreFile(e) {
+    const file=e.target.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=async evt=>{
       try {
-        const data = JSON.parse(evt.target.result);
-        if (!data.bowlers || !data.sessions) throw new Error("Invalid backup file.");
-        if (restoreMode === "replace") {
-          setBowlers(data.bowlers || []); setSessions(data.sessions || []);
-          if (data.settings) setSettings(data.settings);
-          setBackupStatus({ type: "success", msg: "Restore complete. All data replaced." });
+        const data=JSON.parse(evt.target.result);
+        if(!data.bowlers||!data.sessions) throw new Error("Invalid backup file.");
+        if(restoreMode==="replace") {
+          await sb.from("bowlers").delete().neq("id","__none__");
+          await sb.from("sessions").delete().neq("id","__none__");
+          await sb.from("bowlers").insert(data.bowlers);
+          await sb.from("sessions").insert(data.sessions);
+          if(data.settings) await sb.from("settings").upsert({ id:"config", data:data.settings });
+          setBowlers(data.bowlers); setSessions(data.sessions); if(data.settings) setSettings(data.settings);
+          setBackupStatus({ type:"success", msg:"Restore complete. All data replaced." });
         } else {
-          setBowlers(prev => { const ids = new Set(prev.map(b => b.id)), names = new Set(prev.map(b => b.name.toLowerCase())); return [...prev, ...(data.bowlers || []).filter(b => !ids.has(b.id) && !names.has(b.name.toLowerCase()))]; });
-          setSessions(prev => { const ids = new Set(prev.map(s => s.id)), dates = new Set(prev.map(s => s.date)); return [...prev, ...(data.sessions || []).filter(s => !ids.has(s.id) && !dates.has(s.date))].sort((a, b) => b.date.localeCompare(a.date)); });
-          setBackupStatus({ type: "success", msg: "Merge complete. New data added; existing preserved." });
+          const existIds=new Set(bowlers.map(b=>b.id)), existNames=new Set(bowlers.map(b=>b.name.toLowerCase()));
+          const newB=(data.bowlers||[]).filter(b=>!existIds.has(b.id)&&!existNames.has(b.name.toLowerCase()));
+          const existDates=new Set(sessions.map(s=>s.date));
+          const newS=(data.sessions||[]).filter(s=>!existDates.has(s.date));
+          if(newB.length) { await sb.from("bowlers").insert(newB); setBowlers(prev=>[...prev,...newB]); }
+          if(newS.length) { await sb.from("sessions").insert(newS); setSessions(prev=>[...prev,...newS].sort((a,b)=>b.date.localeCompare(a.date))); }
+          setBackupStatus({ type:"success", msg:`Merge complete. Added ${newB.length} bowler(s) and ${newS.length} session(s).` });
         }
-      } catch (err) { setBackupStatus({ type: "error", msg: err.message }); }
-      e.target.value = "";
+      } catch(err) { setBackupStatus({ type:"error", msg:err.message }); }
+      e.target.value="";
     };
-    reader.onerror = () => setBackupStatus({ type: "error", msg: "Failed to read file." });
+    reader.onerror=()=>setBackupStatus({ type:"error", msg:"Failed to read file." });
     reader.readAsText(file);
   }
 
-  const leaderboard = bowlers.map(b => {
-    const avg = getBowlerAvg(b), handicap = calcHandicap(avg, base, factor);
-    const ts = (sessionScores[b.id] || []).filter(x => x !== "").map(Number);
-    return { ...b, avg: Math.round(avg * 10) / 10, handicap, scratch: ts.reduce((a, x) => a + x, 0), games: ts.length, highGame: getBowlerHighGame(b), highSeries: getBowlerHighSeries(b) };
-  }).sort((a, b) => b.avg - a.avg);
+  const leaderboard=bowlers.map(b=>{
+    const avg=getBowlerAvg(b),handicap=calcHandicap(avg,base,factor);
+    const ts=(sessionScores[b.id]||[]).filter(x=>x!=="").map(Number);
+    return { ...b, avg:Math.round(avg*10)/10, handicap, scratch:ts.reduce((a,x)=>a+x,0), games:ts.length, highGame:getBowlerHighGame(b), highSeries:getBowlerHighSeries(b) };
+  }).sort((a,b)=>b.avg-a.avg);
 
-  const card = { background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, padding: "1rem 1.25rem", marginBottom: 12 };
-  const sm = { color: C.textSub, fontSize: 13 };
-  const tabBtn = active => ({ background: active ? C.blueBg : "#fff", color: active ? C.blueText : C.textSub, border: `0.5px solid ${active ? C.blueBorder : C.border}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: active ? 500 : 400 });
-  const lockBtn = { marginTop: 8, color: C.textSub, background: "transparent", border: `0.5px solid ${C.border}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 };
-  const pill = active => ({ background: active ? C.redBg : C.grayBg, color: active ? C.redText : C.textSub, border: `0.5px solid ${active ? C.redBorder : C.grayBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 });
-  const statusCard = type => ({ ...card, background: type === "success" ? C.greenBg : C.redBg, border: `0.5px solid ${type === "success" ? C.greenBorder : C.redBorder}` });
+  const card={ background:C.card, border:`0.5px solid ${C.border}`, borderRadius:12, padding:"1rem 1.25rem", marginBottom:12 };
+  const sm={ color:C.textSub, fontSize:13 };
+  const tabBtn=active=>({ background:active?C.blueBg:"#fff", color:active?C.blueText:C.textSub, border:`0.5px solid ${active?C.blueBorder:C.border}`, borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13, fontWeight:active?500:400 });
+  const lockBtn={ marginTop:8, color:C.textSub, background:"transparent", border:`0.5px solid ${C.border}`, borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13 };
+  const pill=active=>({ background:active?C.redBg:C.grayBg, color:active?C.redText:C.textSub, border:`0.5px solid ${active?C.redBorder:C.grayBorder}`, borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13 });
+  const statusCard=type=>({ ...card, background:type==="success"?C.greenBg:C.redBg, border:`0.5px solid ${type==="success"?C.greenBorder:C.redBorder}` });
 
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto", padding: "1rem 1rem 4rem" }}>
-      <h2 style={{ color: C.blueText, fontSize: 22, fontWeight: 600, marginBottom: 2 }}>{settings.teamName}</h2>
-      <p style={{ ...sm, marginBottom: 16 }}>Bowling score &amp; handicap tracker</p>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-        {ROW1.map(t => <button key={t} onClick={() => setTab(t)} style={tabBtn(tab === t)}>{TAB_LABELS[t]}</button>)}
+    <div style={{ maxWidth:680, margin:"0 auto", padding:"1rem 1rem 4rem" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:2 }}>
+        <h2 style={{ color:C.blueText, fontSize:22, fontWeight:600 }}>{settings.teamName}</h2>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <div style={{ width:8, height:8, borderRadius:"50%", background:loading?"#f59e0b":C.green }}/>
+          <span style={{ fontSize:12, color:C.textMuted }}>{loading?"loading...":"cloud sync on"}</span>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        {ROW2.map(t => <button key={t} onClick={() => setTab(t)} style={tabBtn(tab === t)}>{TAB_LABELS[t]}</button>)}
+      <p style={{ ...sm, marginBottom:16 }}>Bowling score &amp; handicap tracker</p>
+
+      {syncStatus && (
+        <div style={{ ...statusCard(syncStatus.type), padding:"8px 14px", marginBottom:12 }}>
+          <p style={{ color:syncStatus.type==="success"?C.greenText:C.redText, fontSize:13 }}>{syncStatus.msg}</p>
+        </div>
+      )}
+
+      <div style={{ display:"flex", gap:6, marginBottom:8, flexWrap:"wrap" }}>
+        {ROW1.map(t=><button key={t} onClick={()=>setTab(t)} style={tabBtn(tab===t)}>{TAB_LABELS[t]}</button>)}
+      </div>
+      <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
+        {ROW2.map(t=><button key={t} onClick={()=>setTab(t)} style={tabBtn(tab===t)}>{TAB_LABELS[t]}</button>)}
       </div>
 
+      {loading && <Spinner/>}
+
+      {!loading && <>
+
       {/* ROSTER */}
-      {tab === "roster" && (
+      {tab==="roster" && (
         <div>
           <div style={card}>
-            <p style={{ ...sm, marginBottom: 8 }}>Add bowler</p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input placeholder="Bowler name" value={newName} onChange={e => { setNewName(e.target.value); setDupError(false); }} onKeyDown={e => e.key === "Enter" && addBowler()} style={{ flex: 1, width: "auto", borderColor: dupError ? C.red : undefined }} />
-              <button onClick={addBowler} style={{ background: C.blueBg, color: C.blueText, border: `0.5px solid ${C.blueBorder}` }}>Add</button>
+            <p style={{ ...sm, marginBottom:8 }}>Add bowler</p>
+            <div style={{ display:"flex", gap:8 }}>
+              <input placeholder="Bowler name" value={newName} onChange={e=>{ setNewName(e.target.value); setDupError(false); }} onKeyDown={e=>e.key==="Enter"&&addBowler()} style={{ flex:1, width:"auto", borderColor:dupError?C.red:undefined }} />
+              <button onClick={addBowler} style={{ background:C.blueBg, color:C.blueText, border:`0.5px solid ${C.blueBorder}` }}>Add</button>
             </div>
-            {dupError && <p style={{ color: C.red, fontSize: 13, marginTop: 6 }}>A bowler with that name already exists.</p>}
+            {dupError && <p style={{ color:C.red, fontSize:13, marginTop:6 }}>A bowler with that name already exists.</p>}
           </div>
-          {bowlers.length === 0 && <p style={sm}>No bowlers yet.</p>}
-          <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
-            {bowlers.map((b, i) => {
-              const avg = getBowlerAvg(b), hcap = calcHandicap(avg, base, factor);
+          {bowlers.length===0 && <p style={sm}>No bowlers yet.</p>}
+          <div style={{ background:C.card, border:`0.5px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
+            {bowlers.map((b,i)=>{
+              const avg=getBowlerAvg(b),hcap=calcHandicap(avg,base,factor);
               return (
-                <div key={b.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, alignItems: "center", padding: "8px 12px", borderTop: i > 0 ? `0.5px solid ${C.borderLight}` : "none" }}>
-                  <p style={{ fontWeight: 500, fontSize: 13 }}>{b.name}</p>
-                  <p style={{ ...sm, fontSize: 12, textAlign: "center" }}>Avg: {avg ? Math.round(avg) : "—"}</p>
-                  <p style={{ ...sm, fontSize: 12, textAlign: "center" }}>Hcap: {avg ? hcap : "—"}</p>
-                  <button onClick={() => removeBowler(b.id)} style={{ color: C.red, background: C.redBg, border: `0.5px solid ${C.redBorder}`, borderRadius: 8, padding: "3px 8px", cursor: "pointer", fontSize: 12 }}>Remove</button>
+                <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:8, alignItems:"center", padding:"8px 12px", borderTop:i>0?`0.5px solid ${C.borderLight}`:"none" }}>
+                  <p style={{ fontWeight:500, fontSize:13 }}>{b.name}</p>
+                  <p style={{ ...sm, fontSize:12, textAlign:"center" }}>Avg: {avg?Math.round(avg):"—"}</p>
+                  <p style={{ ...sm, fontSize:12, textAlign:"center" }}>Hcap: {avg?hcap:"—"}</p>
+                  <button onClick={()=>removeBowler(b.id)} style={{ color:C.red, background:C.redBg, border:`0.5px solid ${C.redBorder}`, borderRadius:8, padding:"3px 8px", cursor:"pointer", fontSize:12 }}>Remove</button>
                 </div>
               );
             })}
@@ -268,98 +349,98 @@ function App() {
       )}
 
       {/* SELECTION */}
-      {tab === "selection" && (
+      {tab==="selection" && (
         <div>
           <div style={card}>
-            <p style={{ ...sm, marginBottom: 6 }}>Session date</p>
-            <input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
+            <p style={{ ...sm, marginBottom:6 }}>Session date</p>
+            <input type="date" value={sessionDate} onChange={e=>setSessionDate(e.target.value)} />
           </div>
-          {bowlers.length === 0 && <p style={sm}>Add bowlers in the Roster tab first.</p>}
-          {bowlers.length > 0 && (
+          {bowlers.length===0 && <p style={sm}>Add bowlers in the Roster tab first.</p>}
+          {bowlers.length>0 && (
             <div style={card}>
-              <p style={{ ...sm, marginBottom: 8 }}>Tap to select players for this session</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                {[...bowlers].sort((a, b) => a.name.localeCompare(b.name)).map(b => (
-                  <button key={b.id} onClick={() => toggleBowler(b.id)} style={pill(activeBowlers.includes(b.id))}>{activeBowlers.includes(b.id) ? "✓ " : ""}{b.name}</button>
+              <p style={{ ...sm, marginBottom:8 }}>Tap to select players for this session</p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+                {[...bowlers].sort((a,b)=>a.name.localeCompare(b.name)).map(b=>(
+                  <button key={b.id} onClick={()=>toggleBowler(b.id)} style={pill(activeBowlers.includes(b.id))}>{activeBowlers.includes(b.id)?"✓ ":""}{b.name}</button>
                 ))}
               </div>
             </div>
           )}
-          {activeBowlers.length > 0 && (
-            <div style={{ ...card, background: C.grayBg }}>
-              <p style={{ ...sm, marginBottom: 6 }}>Selected ({activeBowlers.length})</p>
-              {bowlers.filter(b => activeBowlers.includes(b.id)).map(b => <p key={b.id} style={{ fontSize: 14, margin: "4px 0" }}>{b.name}</p>)}
-              <button onClick={() => setTab("scores")} style={{ marginTop: 10, background: C.blueBg, color: C.blueText, border: `0.5px solid ${C.blueBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 14 }}>Go to Score Entry →</button>
+          {activeBowlers.length>0 && (
+            <div style={{ ...card, background:C.grayBg }}>
+              <p style={{ ...sm, marginBottom:6 }}>Selected ({activeBowlers.length})</p>
+              {bowlers.filter(b=>activeBowlers.includes(b.id)).map(b=><p key={b.id} style={{ fontSize:14, margin:"4px 0" }}>{b.name}</p>)}
+              <button onClick={()=>setTab("scores")} style={{ marginTop:10, background:C.blueBg, color:C.blueText, border:`0.5px solid ${C.blueBorder}`, borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:14 }}>Go to Score Entry →</button>
             </div>
           )}
         </div>
       )}
 
       {/* SCORES */}
-      {tab === "scores" && (
+      {tab==="scores" && (
         <div>
-          {activeBowlers.length === 0 && <p style={sm}>No players selected. Go to Player Selection first.</p>}
-          {bowlers.filter(b => activeBowlers.includes(b.id)).map(b => {
-            const avg = getBowlerAvg(b), hcap = calcHandicap(avg, base, factor);
-            const scores = sessionScores[b.id] || ["", "", ""];
-            const filled = scores.filter(x => x !== "").map(Number);
-            const total = filled.reduce((a, x) => a + x, 0);
+          {activeBowlers.length===0 && <p style={sm}>No players selected. Go to Player Selection first.</p>}
+          {bowlers.filter(b=>activeBowlers.includes(b.id)).map(b=>{
+            const avg=getBowlerAvg(b),hcap=calcHandicap(avg,base,factor);
+            const scores=sessionScores[b.id]||["","",""];
+            const filled=scores.filter(x=>x!=="").map(Number);
+            const total=filled.reduce((a,x)=>a+x,0);
             return (
-              <div key={b.id} style={{ ...card, padding: "0.6rem 1rem" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr", gap: 8, alignItems: "center" }}>
+              <div key={b.id} style={{ ...card, padding:"0.6rem 1rem" }}>
+                <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr 1fr", gap:8, alignItems:"center" }}>
                   <div>
-                    <p style={{ fontWeight: 500, fontSize: 13 }}>{b.name}</p>
-                    <p style={{ ...sm, fontSize: 11 }}>Avg {avg ? Math.round(avg) : "—"} · Hcap {avg ? hcap : "—"}</p>
+                    <p style={{ fontWeight:500, fontSize:13 }}>{b.name}</p>
+                    <p style={{ ...sm, fontSize:11 }}>Avg {avg?Math.round(avg):"—"} · Hcap {avg?hcap:"—"}</p>
                   </div>
-                  {[0, 1, 2].map(i => (
-                    <input key={i} type="number" min="0" max="300" placeholder={`G${i+1}`} value={scores[i]} onChange={e => updateScore(b.id, i, e.target.value)} style={{ textAlign: "center" }} />
+                  {[0,1,2].map(i=>(
+                    <input key={i} type="number" min="0" max="300" placeholder={`G${i+1}`} value={scores[i]} onChange={e=>updateScore(b.id,i,e.target.value)} style={{ textAlign:"center" }} />
                   ))}
-                  <div style={{ background: C.grayBg, borderRadius: 8, padding: "4px 6px", textAlign: "center" }}>
-                    <p style={{ ...sm, fontSize: 10, marginBottom: 1 }}>Scratch</p>
-                    <p style={{ fontWeight: 500, fontSize: 13 }}>{filled.length > 0 ? total : "—"}</p>
+                  <div style={{ background:C.grayBg, borderRadius:8, padding:"4px 6px", textAlign:"center" }}>
+                    <p style={{ ...sm, fontSize:10, marginBottom:1 }}>Scratch</p>
+                    <p style={{ fontWeight:500, fontSize:13 }}>{filled.length>0?total:"—"}</p>
                   </div>
-                  <div style={{ background: C.grayBg, borderRadius: 8, padding: "4px 6px", textAlign: "center" }}>
-                    <p style={{ ...sm, fontSize: 10, marginBottom: 1 }}>+Hcap</p>
-                    <p style={{ fontWeight: 500, fontSize: 13 }}>{filled.length > 0 ? total + hcap * filled.length : "—"}</p>
+                  <div style={{ background:C.grayBg, borderRadius:8, padding:"4px 6px", textAlign:"center" }}>
+                    <p style={{ ...sm, fontSize:10, marginBottom:1 }}>+Hcap</p>
+                    <p style={{ fontWeight:500, fontSize:13 }}>{filled.length>0?total+hcap*filled.length:"—"}</p>
                   </div>
                 </div>
               </div>
             );
           })}
-          {activeBowlers.length > 0 && (
-            <button onClick={saveSession} style={{ width: "100%", padding: "10px 0", fontWeight: 500, fontSize: 15, background: saved ? C.greenBg : C.blueBg, color: saved ? C.greenText : C.blueText, border: `0.5px solid ${saved ? C.greenBorder : C.blueBorder}`, borderRadius: 10, cursor: "pointer", marginTop: 4 }}>
-              {saved ? "Session saved! ✓" : "Save session"}
+          {activeBowlers.length>0 && (
+            <button onClick={saveSession} style={{ width:"100%", padding:"10px 0", fontWeight:500, fontSize:15, background:saved?C.greenBg:C.blueBg, color:saved?C.greenText:C.blueText, border:`0.5px solid ${saved?C.greenBorder:C.blueBorder}`, borderRadius:10, cursor:"pointer", marginTop:4 }}>
+              {saved?"Session saved to cloud! ✓":"Save session"}
             </button>
           )}
         </div>
       )}
 
       {/* LEADERBOARD */}
-      {tab === "leaderboard" && (
+      {tab==="leaderboard" && (
         <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <button onClick={exportExcel} style={{ background: C.greenBg, color: C.greenText, border: `0.5px solid ${C.greenBorder}` }}>Export Excel</button>
-            <button onClick={exportPDF} style={{ background: C.redBg, color: C.redText, border: `0.5px solid ${C.redBorder}` }}>Export &amp; Print</button>
+          <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+            <button onClick={exportExcel} style={{ background:C.greenBg, color:C.greenText, border:`0.5px solid ${C.greenBorder}` }}>Export Excel</button>
+            <button onClick={exportPDF} style={{ background:C.redBg, color:C.redText, border:`0.5px solid ${C.redBorder}` }}>Export &amp; Print</button>
           </div>
-          {leaderboard.length === 0 && <p style={sm}>No bowlers yet.</p>}
-          <div style={{ background: C.card, border: `0.5px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+          {leaderboard.length===0 && <p style={sm}>No bowlers yet.</p>}
+          <div style={{ background:C.card, border:`0.5px solid ${C.border}`, borderRadius:12, overflow:"hidden" }}>
             <table>
               <thead>
-                <tr style={{ background: C.grayBg }}>
-                  {["#", "Name", "Avg", "Hcap", "Hi Game", "Hi Series"].map((h, i) => (
-                    <th key={h} style={{ padding: "8px 10px", textAlign: i > 1 ? "center" : "left", fontWeight: 500, color: C.textSub, fontSize: 11 }}>{h}</th>
+                <tr style={{ background:C.grayBg }}>
+                  {["#","Name","Avg","Hcap","Hi Game","Hi Series"].map((h,i)=>(
+                    <th key={h} style={{ padding:"8px 10px", textAlign:i>1?"center":"left", fontWeight:500, color:C.textSub, fontSize:11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {leaderboard.map((b, i) => (
-                  <tr key={b.id} style={{ borderTop: `0.5px solid ${C.borderLight}` }}>
-                    <td style={{ padding: "8px 10px", color: C.textMuted, fontSize: 11 }}>{i + 1}</td>
-                    <td style={{ padding: "8px 10px", fontWeight: 500, fontSize: 13 }}>{b.name}</td>
-                    <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 13 }}>{b.avg ? Math.round(b.avg) : "—"}</td>
-                    <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 13 }}>{b.avg ? Math.round(b.handicap) : "—"}</td>
-                    <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 13 }}>{b.highGame || "—"}</td>
-                    <td style={{ padding: "8px 10px", textAlign: "center", fontSize: 13 }}>{b.highSeries || "—"}</td>
+                {leaderboard.map((b,i)=>(
+                  <tr key={b.id} style={{ borderTop:`0.5px solid ${C.borderLight}` }}>
+                    <td style={{ padding:"8px 10px", color:C.textMuted, fontSize:11 }}>{i+1}</td>
+                    <td style={{ padding:"8px 10px", fontWeight:500, fontSize:13 }}>{b.name}</td>
+                    <td style={{ padding:"8px 10px", textAlign:"center", fontSize:13 }}>{b.avg?Math.round(b.avg):"—"}</td>
+                    <td style={{ padding:"8px 10px", textAlign:"center", fontSize:13 }}>{b.avg?Math.round(b.handicap):"—"}</td>
+                    <td style={{ padding:"8px 10px", textAlign:"center", fontSize:13 }}>{b.highGame||"—"}</td>
+                    <td style={{ padding:"8px 10px", textAlign:"center", fontSize:13 }}>{b.highSeries||"—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -369,109 +450,111 @@ function App() {
       )}
 
       {/* HISTORY */}
-      {tab === "history" && !historyUnlocked && <PwGate title="Enter password to view score history" subtitle="Score history is password protected." onUnlock={() => setHistoryUnlocked(true)} />}
-      {tab === "history" && historyUnlocked && (
+      {tab==="history" && !historyUnlocked && <PwGate title="Enter password to view score history" subtitle="Score history is password protected." onUnlock={()=>setHistoryUnlocked(true)} />}
+      {tab==="history" && historyUnlocked && (
         <div>
-          {sessions.length === 0 && <p style={sm}>No sessions recorded yet.</p>}
-          {sessions.map(s => (
-            <div key={s.id} style={{ ...card, padding: "0.75rem 1rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <p style={{ fontWeight: 500 }}>{s.date}</p>
-                <button onClick={() => deleteSession(s.id)} style={{ color: C.red, background: "transparent", border: "none", cursor: "pointer", fontSize: 13, padding: 0 }}>Delete</button>
+          {sessions.length===0 && <p style={sm}>No sessions recorded yet.</p>}
+          {sessions.map(s=>(
+            <div key={s.id} style={{ ...card, padding:"0.75rem 1rem" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <p style={{ fontWeight:500 }}>{s.date}</p>
+                <button onClick={()=>deleteSession(s.id)} style={{ color:C.red, background:"transparent", border:"none", cursor:"pointer", fontSize:13, padding:0 }}>Delete</button>
               </div>
-              {bowlers.map(b => {
-                const gs = (s.scores[b.id] || []).filter(x => x !== "");
-                if (!gs.length) return null;
-                return <p key={b.id} style={{ ...sm, margin: "2px 0" }}>{b.name}: {gs.join(" | ")} = {gs.reduce((a, x) => a + Number(x), 0)}</p>;
+              {bowlers.map(b=>{
+                const gs=(s.scores[b.id]||[]).filter(x=>x!=="");
+                if(!gs.length) return null;
+                return <p key={b.id} style={{ ...sm, margin:"2px 0" }}>{b.name}: {gs.join(" | ")} = {gs.reduce((a,x)=>a+Number(x),0)}</p>;
               })}
             </div>
           ))}
-          <button onClick={() => setHistoryUnlocked(false)} style={lockBtn}>Lock history</button>
+          <button onClick={()=>setHistoryUnlocked(false)} style={lockBtn}>Lock history</button>
         </div>
       )}
 
       {/* IMPORT */}
-      {tab === "import" && !importUnlocked && <PwGate title="Enter password to import Excel" subtitle="Excel import is password protected." onUnlock={() => setImportUnlocked(true)} />}
-      {tab === "import" && importUnlocked && (
+      {tab==="import" && !importUnlocked && <PwGate title="Enter password to import Excel" subtitle="Excel import is password protected." onUnlock={()=>setImportUnlocked(true)} />}
+      {tab==="import" && importUnlocked && (
         <div>
           <div style={card}>
-            <p style={{ fontWeight: 500, marginBottom: 6 }}>Upload Excel file</p>
-            <p style={{ ...sm, marginBottom: 12 }}>Required column headers:</p>
-            <div style={{ background: C.grayBg, borderRadius: 8, padding: "10px 14px", fontFamily: "monospace", fontSize: 13, marginBottom: 14 }}>name | date | game1 | game2 | game3</div>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileImport} style={{ display: "block" }} />
+            <p style={{ fontWeight:500, marginBottom:6 }}>Upload Excel file</p>
+            <p style={{ ...sm, marginBottom:12 }}>Required column headers:</p>
+            <div style={{ background:C.grayBg, borderRadius:8, padding:"10px 14px", fontFamily:"monospace", fontSize:13, marginBottom:14 }}>name | date | game1 | game2 | game3</div>
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileImport} style={{ display:"block" }} />
           </div>
           {importStatus && (
             <div style={statusCard(importStatus.type)}>
-              <p style={{ color: importStatus.type === "success" ? C.greenText : C.redText, fontSize: 14 }}>{importStatus.msg}</p>
+              <p style={{ color:importStatus.type==="success"?C.greenText:C.redText, fontSize:14 }}>{importStatus.msg}</p>
             </div>
           )}
-          <div style={{ ...card, background: C.grayBg }}>
-            <p style={{ ...sm, fontWeight: 500, marginBottom: 6 }}>Notes</p>
-            {["File must be .xlsx or .xls", "First row must be column headers", "Dates: DD/MM/YYYY or YYYY-MM-DD", "Scores must be 0–300", "New bowlers are added automatically", "Sessions with duplicate dates are skipped"].map(n => (
-              <p key={n} style={{ ...sm, margin: "3px 0" }}>• {n}</p>
+          <div style={{ ...card, background:C.grayBg }}>
+            <p style={{ ...sm, fontWeight:500, marginBottom:6 }}>Notes</p>
+            {["File must be .xlsx or .xls","First row must be column headers","Dates: DD/MM/YYYY or YYYY-MM-DD","Scores must be 0–300","New bowlers are added automatically","Sessions with duplicate dates are skipped"].map(n=>(
+              <p key={n} style={{ ...sm, margin:"3px 0" }}>• {n}</p>
             ))}
           </div>
-          <button onClick={() => setImportUnlocked(false)} style={lockBtn}>Lock import</button>
+          <button onClick={()=>setImportUnlocked(false)} style={lockBtn}>Lock import</button>
         </div>
       )}
 
       {/* BACKUP */}
-      {tab === "backup" && !backupUnlocked && <PwGate title="Enter password to access Backup / Restore" subtitle="Backup and restore is password protected." onUnlock={() => setBackupUnlocked(true)} />}
-      {tab === "backup" && backupUnlocked && (
+      {tab==="backup" && !backupUnlocked && <PwGate title="Enter password to access Backup / Restore" subtitle="Backup and restore is password protected." onUnlock={()=>setBackupUnlocked(true)} />}
+      {tab==="backup" && backupUnlocked && (
         <div>
           <div style={card}>
-            <p style={{ fontWeight: 500, marginBottom: 4 }}>Export full backup</p>
-            <p style={{ ...sm, marginBottom: 12 }}>Downloads a JSON file with all bowlers, sessions, and settings.</p>
-            <button onClick={exportBackup} style={{ background: C.greenBg, color: C.greenText, border: `0.5px solid ${C.greenBorder}`, borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 14 }}>Download JSON Backup</button>
-            <p style={{ ...sm, marginTop: 10 }}>Bowlers: {bowlers.length} · Sessions: {sessions.length}</p>
+            <p style={{ fontWeight:500, marginBottom:4 }}>Export full backup</p>
+            <p style={{ ...sm, marginBottom:12 }}>Downloads a JSON file with all bowlers, sessions, and settings from the cloud.</p>
+            <button onClick={exportBackup} style={{ background:C.greenBg, color:C.greenText, border:`0.5px solid ${C.greenBorder}`, borderRadius:8, padding:"8px 18px", cursor:"pointer", fontSize:14 }}>Download JSON Backup</button>
+            <p style={{ ...sm, marginTop:10 }}>Bowlers: {bowlers.length} · Sessions: {sessions.length}</p>
           </div>
           <div style={card}>
-            <p style={{ fontWeight: 500, marginBottom: 4 }}>Restore from backup</p>
-            <p style={{ ...sm, marginBottom: 10 }}>Upload a previously exported JSON backup file.</p>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              {["merge", "replace"].map(mode => (
-                <button key={mode} onClick={() => setRestoreMode(mode)} style={{ background: restoreMode === mode ? C.blueBg : C.grayBg, color: restoreMode === mode ? C.blueText : C.textSub, border: `0.5px solid ${restoreMode === mode ? C.blueBorder : C.grayBorder}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
-                  {mode === "merge" ? "Merge (keep existing)" : "Replace (overwrite all)"}
+            <p style={{ fontWeight:500, marginBottom:4 }}>Restore from backup</p>
+            <p style={{ ...sm, marginBottom:10 }}>Upload a previously exported JSON backup file.</p>
+            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+              {["merge","replace"].map(mode=>(
+                <button key={mode} onClick={()=>setRestoreMode(mode)} style={{ background:restoreMode===mode?C.blueBg:C.grayBg, color:restoreMode===mode?C.blueText:C.textSub, border:`0.5px solid ${restoreMode===mode?C.blueBorder:C.grayBorder}`, borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13 }}>
+                  {mode==="merge"?"Merge (keep existing)":"Replace (overwrite all)"}
                 </button>
               ))}
             </div>
-            <input type="file" accept=".json" onChange={handleRestoreFile} style={{ display: "block", marginBottom: 8 }} />
+            <input type="file" accept=".json" onChange={handleRestoreFile} style={{ display:"block", marginBottom:8 }} />
             <p style={{ ...sm }}><strong>Merge:</strong> adds new data, keeps existing intact.<br/><strong>Replace:</strong> wipes everything and loads the backup.</p>
           </div>
           {backupStatus && (
             <div style={statusCard(backupStatus.type)}>
-              <p style={{ color: backupStatus.type === "success" ? C.greenText : C.redText, fontSize: 14 }}>{backupStatus.msg}</p>
+              <p style={{ color:backupStatus.type==="success"?C.greenText:C.redText, fontSize:14 }}>{backupStatus.msg}</p>
             </div>
           )}
-          <button onClick={() => setBackupUnlocked(false)} style={lockBtn}>Lock backup</button>
+          <button onClick={()=>setBackupUnlocked(false)} style={lockBtn}>Lock backup</button>
         </div>
       )}
 
       {/* SETTINGS */}
-      {tab === "settings" && !settingsUnlocked && <PwGate title="Enter password to access settings" subtitle="Settings are password protected." onUnlock={() => setSettingsUnlocked(true)} />}
-      {tab === "settings" && settingsUnlocked && (
+      {tab==="settings" && !settingsUnlocked && <PwGate title="Enter password to access settings" subtitle="Settings are password protected." onUnlock={()=>setSettingsUnlocked(true)} />}
+      {tab==="settings" && settingsUnlocked && (
         <div>
           <div style={card}>
-            <p style={{ ...sm, marginBottom: 6 }}>Team name</p>
-            <input value={settings.teamName} onChange={e => setSettings(s => ({ ...s, teamName: e.target.value }))} />
+            <p style={{ ...sm, marginBottom:6 }}>Team name</p>
+            <input value={settings.teamName} onChange={e=>saveSettings({...settings,teamName:e.target.value})} />
           </div>
           <div style={card}>
-            <p style={{ ...sm, marginBottom: 6 }}>Handicap base score</p>
-            <input type="number" value={settings.base} onChange={e => setSettings(s => ({ ...s, base: e.target.value }))} />
-            <p style={{ ...sm, marginTop: 6 }}>Common values: 200, 210, 220, 230</p>
+            <p style={{ ...sm, marginBottom:6 }}>Handicap base score</p>
+            <input type="number" value={settings.base} onChange={e=>saveSettings({...settings,base:e.target.value})} />
+            <p style={{ ...sm, marginTop:6 }}>Common values: 200, 210, 220, 230</p>
           </div>
           <div style={card}>
-            <p style={{ ...sm, marginBottom: 6 }}>Handicap factor (%)</p>
-            <input type="number" min="50" max="100" value={settings.factor} onChange={e => setSettings(s => ({ ...s, factor: e.target.value }))} />
-            <p style={{ ...sm, marginTop: 6 }}>Common values: 80%, 90%, 100%</p>
+            <p style={{ ...sm, marginBottom:6 }}>Handicap factor (%)</p>
+            <input type="number" min="50" max="100" value={settings.factor} onChange={e=>saveSettings({...settings,factor:e.target.value})} />
+            <p style={{ ...sm, marginTop:6 }}>Common values: 80%, 90%, 100%</p>
           </div>
-          <div style={{ ...card, background: C.grayBg }}>
-            <p style={{ ...sm, marginBottom: 4 }}>Handicap formula</p>
-            <p style={{ fontFamily: "monospace", fontSize: 14 }}>({settings.base} - avg) × {settings.factor}%</p>
+          <div style={{ ...card, background:C.grayBg }}>
+            <p style={{ ...sm, marginBottom:4 }}>Handicap formula</p>
+            <p style={{ fontFamily:"monospace", fontSize:14 }}>({settings.base} - avg) × {settings.factor}%</p>
           </div>
-          <button onClick={() => setSettingsUnlocked(false)} style={lockBtn}>Lock settings</button>
+          <button onClick={()=>setSettingsUnlocked(false)} style={lockBtn}>Lock settings</button>
         </div>
       )}
+
+      </>}
     </div>
   );
 }
