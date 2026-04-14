@@ -74,6 +74,7 @@ function App() {
   const [dupError, setDupError] = useState(false);
   const [sessionScores, setSessionScores] = useState({});
   const [activeBowlers, setActiveBowlers] = useState([]);
+  const [bowlerSearch, setBowlerSearch] = useState("");
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().slice(0,10));
   const [saved, setSaved] = useState(false);
   const [unlocked, setUnlocked] = useState({ history:false, import:false, backup:false, settings:false });
@@ -364,12 +365,25 @@ function App() {
           {bowlers.length>0 && (
             <div style={cardS}>
               <p style={{ ...smTxt, marginBottom:8 }}>Tap to select players</p>
+              <input
+                placeholder="Search bowlers..."
+                value={bowlerSearch}
+                onChange={e=>setBowlerSearch(e.target.value)}
+                style={{ ...inputS, marginBottom:10 }}
+              />
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-                {[...bowlers].sort((a,b)=>a.name.localeCompare(b.name)).map(b=>{
-                  const active=activeBowlers.includes(b.id);
-                  return <button key={b.id} onClick={()=>toggleBowler(b.id)} style={btnS(active?"#fef2f2":"#f9fafb",active?"#b91c1c":"#6b7280",active?"#fecaca":"#e5e7eb")}>{active?"✓ ":""}{b.name}</button>;
-                })}
+                {[...bowlers]
+                  .sort((a,b)=>a.name.localeCompare(b.name))
+                  .filter(b=>b.name.toLowerCase().includes(bowlerSearch.toLowerCase()))
+                  .map(b=>{
+                    const active=activeBowlers.includes(b.id);
+                    return <button key={b.id} onClick={()=>toggleBowler(b.id)} style={btnS(active?"#fef2f2":"#f9fafb",active?"#b91c1c":"#6b7280",active?"#fecaca":"#e5e7eb")}>{active?"✓ ":""}{b.name}</button>;
+                  })
+                }
               </div>
+              {[...bowlers].filter(b=>b.name.toLowerCase().includes(bowlerSearch.toLowerCase())).length===0 && (
+                <p style={{ ...smTxt, fontSize:12, marginTop:8 }}>No bowlers match "{bowlerSearch}"</p>
+              )}
             </div>
           )}
           {activeBowlers.length>0 && (
